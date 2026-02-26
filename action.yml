@@ -1,0 +1,70 @@
+name: 'BundleCheck Size Audit'
+description: 'Audit npm package bundle sizes against gzip budgets. Fails the build on violations.'
+author: 'BundleCheck'
+
+branding:
+  icon: 'package'
+  color: 'blue'
+
+inputs:
+  api_key:
+    description: 'BundleCheck API key (X-API-Key)'
+    required: true
+
+  packages:
+    description: |
+      Newline-separated list of exact name@version packages to audit.
+      Example:
+        react@18.2.0
+        axios@1.6.7
+    required: true
+
+  per_package_gzip:
+    description: 'Per-package gzip budget in bytes. Packages exceeding this are flagged as violations.'
+    required: false
+
+  total_gzip:
+    description: |
+      Total gzip budget in bytes (sum of all individual package costs).
+      Note: this is not your real app bundle size — it does not account for deduplication or tree-shaking.
+    required: false
+
+  fail_on_violation:
+    description: 'Exit 1 if any budget violation is found. Set to false to report only.'
+    default: 'true'
+
+  fail_on_partial:
+    description: 'Exit 1 if any package could not be bundled (denied, not found, timeout, error).'
+    default: 'false'
+
+  warn_only:
+    description: 'Always exit 0 even if violations are found. Posts the comment but never fails the workflow.'
+    default: 'false'
+
+  github_token:
+    description: 'GitHub token used to post PR comments. Defaults to the built-in GITHUB_TOKEN.'
+    default: ${{ github.token }}
+
+  api_url:
+    description: 'BundleCheck API base URL. Override for self-hosted or staging environments.'
+    default: 'https://bundlecheck.dev'
+
+  poll_interval_seconds:
+    description: 'Seconds between polling requests when the audit is processing asynchronously (>20 packages).'
+    default: '3'
+
+  poll_timeout_seconds:
+    description: 'Maximum seconds to wait for an async audit to complete before failing.'
+    default: '300'
+
+outputs:
+  pass:
+    description: 'Whether the audit passed budget checks (true or false).'
+  total_gzip:
+    description: 'Sum of gzip sizes across all successfully bundled packages, in bytes.'
+  violation_count:
+    description: 'Number of budget violations found.'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
