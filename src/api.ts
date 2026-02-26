@@ -60,12 +60,72 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function truncate(text: string, max = 500): string {
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function getString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractErrorMessage(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value == null) return null;
+
+  const direct = getString(value);
+  if (direct) return direct;
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const message = extractErrorMessage(item, depth + 1);
+      if (message) return message;
+    }
+    return null;
+  }
+
+  if (typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+
+  const preferredKeys = [
+    "message",
+    "detail",
+    "error_description",
+    "title",
+    "reason",
+  ];
+
+  for (const key of preferredKeys) {
+    const message = getString(record[key]);
+    if (message) return message;
+  }
+
+  for (const key of ["error", "errors"]) {
+    const message = extractErrorMessage(record[key], depth + 1);
+    if (message) return message;
+  }
+
+  return null;
+}
+
 async function parseErrorMessage(res: Response): Promise<string> {
+  const status = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`;
+
   try {
-    const body = (await res.json()) as { error?: { message?: string } };
-    return body?.error?.message ?? `HTTP ${res.status}`;
+    const raw = (await res.text()).trim();
+    if (!raw) return status;
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      const message = extractErrorMessage(parsed);
+      if (message) return `${status}: ${truncate(message)}`;
+    } catch {
+      // Not JSON: fall back to raw body text.
+    }
+
+    return `${status}: ${truncate(raw.replace(/\s+/g, " "))}`;
   } catch {
-    return `HTTP ${res.status}`;
+    return status;
   }
 }
 

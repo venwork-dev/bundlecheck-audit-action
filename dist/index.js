@@ -31923,13 +31923,70 @@ function getIDToken(aud) {
 function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
+function truncate(text, max = 500) {
+    return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+function getString(value) {
+    if (typeof value !== "string")
+        return null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
+function extractErrorMessage(value, depth = 0) {
+    if (depth > 4 || value == null)
+        return null;
+    const direct = getString(value);
+    if (direct)
+        return direct;
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const message = extractErrorMessage(item, depth + 1);
+            if (message)
+                return message;
+        }
+        return null;
+    }
+    if (typeof value !== "object")
+        return null;
+    const record = value;
+    const preferredKeys = [
+        "message",
+        "detail",
+        "error_description",
+        "title",
+        "reason",
+    ];
+    for (const key of preferredKeys) {
+        const message = getString(record[key]);
+        if (message)
+            return message;
+    }
+    for (const key of ["error", "errors"]) {
+        const message = extractErrorMessage(record[key], depth + 1);
+        if (message)
+            return message;
+    }
+    return null;
+}
 async function parseErrorMessage(res) {
+    const status = `HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ""}`;
     try {
-        const body = (await res.json());
-        return body?.error?.message ?? `HTTP ${res.status}`;
+        const raw = (await res.text()).trim();
+        if (!raw)
+            return status;
+        try {
+            const parsed = JSON.parse(raw);
+            const message = extractErrorMessage(parsed);
+            if (message)
+                return `${status}: ${truncate(message)}`;
+        }
+        catch {
+            // Not JSON: fall back to raw body text.
+        }
+        return `${status}: ${truncate(raw.replace(/\s+/g, " "))}`;
     }
     catch {
-        return `HTTP ${res.status}`;
+        return status;
     }
 }
 async function postAudit(apiUrl, apiKey, input) {
