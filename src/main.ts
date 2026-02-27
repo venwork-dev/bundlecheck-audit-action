@@ -201,25 +201,41 @@ function applyExitCode(
   failOnPartial: boolean,
   warnOnly: boolean
 ): void {
-  if (!pass && failOnViolation && !warnOnly) {
-    const pkgViolations = violations.filter((v) => v.package !== "(total)");
-    const totalViolation = violations.find((v) => v.package === "(total)");
+  if (warnOnly) {
+    if (!pass) core.warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
+    else core.info("✅ BundleCheck passed.");
+    return;
+  }
+
+  const pkgViolations = violations.filter((v) => v.package !== "(total)");
+  const totalViolation = violations.find((v) => v.package === "(total)");
+  const hasViolations = pkgViolations.length > 0 || totalViolation != null;
+
+  // Budget violations — controlled by fail_on_violation
+  if (hasViolations && failOnViolation) {
     const parts: string[] = [];
     if (pkgViolations.length > 0)
       parts.push(`${pkgViolations.length} package${pkgViolations.length > 1 ? "s" : ""} over per-package budget`);
     if (totalViolation)
       parts.push(`total gzip over budget by ${totalViolation.over_by} bytes`);
-    if (parts.length === 0 && failOnPartial)
-      parts.push("one or more packages could not be bundled");
     core.setFailed(`BundleCheck failed: ${parts.join("; ")}.`);
-  } else if (!pass && warnOnly) {
-    core.warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
-  } else if (!pass) {
-    // fail_on_violation=false: report-only mode — violations exist but we don't fail
-    core.warning("BundleCheck found violations (fail_on_violation=false — reporting only).");
-  } else {
-    core.info("✅ BundleCheck passed.");
+    return;
   }
+
+  // Denied / not-found / error packages — controlled by fail_on_partial
+  if (!pass && failOnPartial) {
+    core.setFailed("BundleCheck failed: one or more packages could not be bundled.");
+    return;
+  }
+
+  if (!pass) {
+    // Denied packages (e.g. typescript, webpack) are expected — they are not browser bundles.
+    // Set fail_on_partial: true to block CI on these.
+    core.warning("BundleCheck: some packages were skipped (denied or not found) — set fail_on_partial: true to treat this as a failure.");
+    return;
+  }
+
+  core.info("✅ BundleCheck passed.");
 }
 
 async function run(): Promise<void> {

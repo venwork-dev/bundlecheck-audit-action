@@ -36657,28 +36657,38 @@ async function runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, fail
     applyExitCode(compare.pass, compare.violations, failOnViolation, failOnPartial, warnOnly);
 }
 function applyExitCode(pass, violations, failOnViolation, failOnPartial, warnOnly) {
-    if (!pass && failOnViolation && !warnOnly) {
-        const pkgViolations = violations.filter((v) => v.package !== "(total)");
-        const totalViolation = violations.find((v) => v.package === "(total)");
+    if (warnOnly) {
+        if (!pass)
+            warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
+        else
+            info("✅ BundleCheck passed.");
+        return;
+    }
+    const pkgViolations = violations.filter((v) => v.package !== "(total)");
+    const totalViolation = violations.find((v) => v.package === "(total)");
+    const hasViolations = pkgViolations.length > 0 || totalViolation != null;
+    // Budget violations — controlled by fail_on_violation
+    if (hasViolations && failOnViolation) {
         const parts = [];
         if (pkgViolations.length > 0)
             parts.push(`${pkgViolations.length} package${pkgViolations.length > 1 ? "s" : ""} over per-package budget`);
         if (totalViolation)
             parts.push(`total gzip over budget by ${totalViolation.over_by} bytes`);
-        if (parts.length === 0 && failOnPartial)
-            parts.push("one or more packages could not be bundled");
         setFailed(`BundleCheck failed: ${parts.join("; ")}.`);
+        return;
     }
-    else if (!pass && warnOnly) {
-        warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
+    // Denied / not-found / error packages — controlled by fail_on_partial
+    if (!pass && failOnPartial) {
+        setFailed("BundleCheck failed: one or more packages could not be bundled.");
+        return;
     }
-    else if (!pass) {
-        // fail_on_violation=false: report-only mode — violations exist but we don't fail
-        warning("BundleCheck found violations (fail_on_violation=false — reporting only).");
+    if (!pass) {
+        // Denied packages (e.g. typescript, webpack) are expected — they are not browser bundles.
+        // Set fail_on_partial: true to block CI on these.
+        warning("BundleCheck: some packages were skipped (denied or not found) — set fail_on_partial: true to treat this as a failure.");
+        return;
     }
-    else {
-        info("✅ BundleCheck passed.");
-    }
+    info("✅ BundleCheck passed.");
 }
 async function run() {
     const apiKey = getInput("api_key", { required: true });
