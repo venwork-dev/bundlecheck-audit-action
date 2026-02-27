@@ -45,7 +45,8 @@ inputs:
 
   lockfile_path:
     description: |
-      Path to package-lock.json relative to the repository root.
+      Path to the lockfile relative to the repository root.
+      Supports package-lock.json (npm v2/v3) and yarn.lock (yarn v1 and berry).
       When provided (and packages is not set), the action diffs base vs head
       lockfiles and audits only added/changed packages.
     default: 'package-lock.json'

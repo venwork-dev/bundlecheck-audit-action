@@ -157,7 +157,10 @@ async function runCompareMode(
       `Could not read ${lockfilePath} from ${baseRef} — treating all packages as new. ` +
         `Make sure "actions/checkout" runs with fetch-depth: 0.`
     );
-    baseLockfile = JSON.stringify({ lockfileVersion: 3, packages: {} });
+    // Return an empty lockfile in the correct format so the server can parse it
+    baseLockfile = lockfilePath.endsWith("yarn.lock")
+      ? "# yarn lockfile v1\n"
+      : JSON.stringify({ lockfileVersion: 3, packages: {} });
   }
 
   const budget = parseBudget();

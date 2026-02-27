@@ -36622,7 +36622,10 @@ async function runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, fail
         // Base lockfile missing means this is a brand-new lockfile — treat everything as added
         warning(`Could not read ${lockfilePath} from ${baseRef} — treating all packages as new. ` +
             `Make sure "actions/checkout" runs with fetch-depth: 0.`);
-        baseLockfile = JSON.stringify({ lockfileVersion: 3, packages: {} });
+        // Return an empty lockfile in the correct format so the server can parse it
+        baseLockfile = lockfilePath.endsWith("yarn.lock")
+            ? "# yarn lockfile v1\n"
+            : JSON.stringify({ lockfileVersion: 3, packages: {} });
     }
     const budget = parseBudget();
     const compare = await postCompare(apiUrl, apiKey, baseLockfile, headLockfile, budget, failOnPartial);
