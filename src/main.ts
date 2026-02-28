@@ -47,7 +47,6 @@ async function runAuditMode(
   githubToken: string,
   failOnViolation: boolean,
   failOnPartial: boolean,
-  warnOnly: boolean,
   pollIntervalSeconds: number,
   pollTimeoutSeconds: number,
   rawPackages: string
@@ -94,7 +93,7 @@ async function runAuditMode(
     core.warning(prCommentWarning(err));
   }
 
-  applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial, warnOnly);
+  applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial);
 }
 
 interface AddedDep { name: string; version: string }
@@ -145,7 +144,6 @@ async function runCompareMode(
   githubToken: string,
   failOnViolation: boolean,
   failOnPartial: boolean,
-  warnOnly: boolean,
   pollIntervalSeconds: number,
   pollTimeoutSeconds: number
 ): Promise<void> {
@@ -248,7 +246,7 @@ async function runCompareMode(
   }
 
   if (audit) {
-    applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial, warnOnly);
+    applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial);
   }
 }
 
@@ -256,20 +254,12 @@ function applyExitCode(
   pass: boolean,
   violations: Array<{ package: string; over_by: number }>,
   failOnViolation: boolean,
-  failOnPartial: boolean,
-  warnOnly: boolean
+  failOnPartial: boolean
 ): void {
-  if (warnOnly) {
-    if (!pass) core.warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
-    else core.info("✅ BundleCheck passed.");
-    return;
-  }
-
   const pkgViolations = violations.filter((v) => v.package !== "(total)");
   const totalViolation = violations.find((v) => v.package === "(total)");
   const hasViolations = pkgViolations.length > 0 || totalViolation != null;
 
-  // Budget violations — controlled by fail_on_violation
   if (hasViolations && failOnViolation) {
     const parts: string[] = [];
     if (pkgViolations.length > 0)
@@ -280,16 +270,8 @@ function applyExitCode(
     return;
   }
 
-  // Denied / not-found / error packages — controlled by fail_on_partial
   if (!pass && failOnPartial) {
     core.setFailed("BundleCheck failed: one or more packages could not be bundled.");
-    return;
-  }
-
-  if (!pass) {
-    // Denied packages (e.g. typescript, webpack) are expected — they are not browser bundles.
-    // Set fail_on_partial: true to block CI on these.
-    core.warning("BundleCheck: some packages were skipped (denied or not found) — set fail_on_partial: true to treat this as a failure.");
     return;
   }
 
@@ -302,7 +284,6 @@ async function run(): Promise<void> {
   const githubToken = core.getInput("github_token", { required: true });
   const failOnViolation = core.getInput("fail_on_violation") !== "false";
   const failOnPartial = core.getInput("fail_on_partial") === "true";
-  const warnOnly = core.getInput("warn_only") === "true";
   const pollIntervalSeconds = getIntInput("poll_interval_seconds", 3);
   const pollTimeoutSeconds = getIntInput("poll_timeout_seconds", 300);
 
@@ -313,14 +294,14 @@ async function run(): Promise<void> {
   if (explicitPackages.trim()) {
     await runAuditMode(
       apiUrl, apiKey, githubToken,
-      failOnViolation, failOnPartial, warnOnly,
+      failOnViolation, failOnPartial,
       pollIntervalSeconds, pollTimeoutSeconds,
       explicitPackages
     );
   } else {
     await runCompareMode(
       apiUrl, apiKey, githubToken,
-      failOnViolation, failOnPartial, warnOnly,
+      failOnViolation, failOnPartial,
       pollIntervalSeconds, pollTimeoutSeconds
     );
   }

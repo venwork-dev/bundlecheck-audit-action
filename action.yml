@@ -14,8 +14,8 @@ inputs:
   packages:
     description: |
       Newline-separated list of exact name@version packages to audit.
-      When omitted, the action runs in lockfile compare mode — diffing base vs head
-      package-lock.json and auditing only added or changed packages.
+      When omitted, the action diffs production dependencies in package.json
+      against the base branch and audits only added or changed packages.
       Example:
         react@18.2.0
         axios@1.6.7
@@ -39,10 +39,6 @@ inputs:
     description: 'Exit 1 if any package could not be bundled (denied, not found, timeout, error).'
     default: 'false'
 
-  warn_only:
-    description: 'Always exit 0 even if violations are found. Posts the comment but never fails the workflow.'
-    default: 'true'
-
   package_json_path:
     description: 'Path to package.json relative to the repository root. Used in compare mode to diff production dependencies.'
     default: 'package.json'
@@ -50,7 +46,7 @@ inputs:
   base_ref:
     description: |
       The base branch ref to diff against (e.g. main, origin/main).
-      Defaults to the PR base branch. Only used in lockfile mode.
+      Defaults to the PR base branch.
     default: ''
 
   github_token:

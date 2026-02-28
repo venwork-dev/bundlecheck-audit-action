@@ -36509,7 +36509,7 @@ function prCommentWarning(err) {
     }
     return `Failed to post PR comment: ${msg}`;
 }
-async function runAuditMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, warnOnly, pollIntervalSeconds, pollTimeoutSeconds, rawPackages) {
+async function runAuditMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, pollIntervalSeconds, pollTimeoutSeconds, rawPackages) {
     const packages = parsePackages(rawPackages);
     if (packages.length === 0) {
         setFailed("No packages provided. Add at least one name@version entry.");
@@ -36548,7 +36548,7 @@ async function runAuditMode(apiUrl, apiKey, githubToken, failOnViolation, failOn
     catch (err) {
         warning(prCommentWarning(err));
     }
-    applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial, warnOnly);
+    applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial);
 }
 // Strip range specifiers from a package.json version spec to get a usable version string.
 // Returns null for non-npm protocols (workspace:, file:, link:, etc.) that can't be bundled.
@@ -36582,7 +36582,7 @@ function diffDependencies(baseDeps, headDeps) {
     }
     return { added, changed, removed };
 }
-async function runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, warnOnly, pollIntervalSeconds, pollTimeoutSeconds) {
+async function runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, pollIntervalSeconds, pollTimeoutSeconds) {
     const packageJsonPath = getInput("package_json_path") || "package.json";
     let baseRef = getInput("base_ref");
     if (!baseRef) {
@@ -36672,21 +36672,13 @@ async function runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, fail
         warning(prCommentWarning(err));
     }
     if (audit) {
-        applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial, warnOnly);
+        applyExitCode(audit.pass, audit.violations, failOnViolation, failOnPartial);
     }
 }
-function applyExitCode(pass, violations, failOnViolation, failOnPartial, warnOnly) {
-    if (warnOnly) {
-        if (!pass)
-            warning("BundleCheck found violations but warn_only is set — not failing the workflow.");
-        else
-            info("✅ BundleCheck passed.");
-        return;
-    }
+function applyExitCode(pass, violations, failOnViolation, failOnPartial) {
     const pkgViolations = violations.filter((v) => v.package !== "(total)");
     const totalViolation = violations.find((v) => v.package === "(total)");
     const hasViolations = pkgViolations.length > 0 || totalViolation != null;
-    // Budget violations — controlled by fail_on_violation
     if (hasViolations && failOnViolation) {
         const parts = [];
         if (pkgViolations.length > 0)
@@ -36696,15 +36688,8 @@ function applyExitCode(pass, violations, failOnViolation, failOnPartial, warnOnl
         setFailed(`BundleCheck failed: ${parts.join("; ")}.`);
         return;
     }
-    // Denied / not-found / error packages — controlled by fail_on_partial
     if (!pass && failOnPartial) {
         setFailed("BundleCheck failed: one or more packages could not be bundled.");
-        return;
-    }
-    if (!pass) {
-        // Denied packages (e.g. typescript, webpack) are expected — they are not browser bundles.
-        // Set fail_on_partial: true to block CI on these.
-        warning("BundleCheck: some packages were skipped (denied or not found) — set fail_on_partial: true to treat this as a failure.");
         return;
     }
     info("✅ BundleCheck passed.");
@@ -36715,17 +36700,16 @@ async function run() {
     const githubToken = getInput("github_token", { required: true });
     const failOnViolation = getInput("fail_on_violation") !== "false";
     const failOnPartial = getInput("fail_on_partial") === "true";
-    const warnOnly = getInput("warn_only") === "true";
     const pollIntervalSeconds = getIntInput("poll_interval_seconds", 3);
     const pollTimeoutSeconds = getIntInput("poll_timeout_seconds", 300);
     // Mode detection: if "packages" is set → explicit audit mode
     //                 otherwise → lockfile compare mode
     const explicitPackages = getInput("packages");
     if (explicitPackages.trim()) {
-        await runAuditMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, warnOnly, pollIntervalSeconds, pollTimeoutSeconds, explicitPackages);
+        await runAuditMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, pollIntervalSeconds, pollTimeoutSeconds, explicitPackages);
     }
     else {
-        await runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, warnOnly, pollIntervalSeconds, pollTimeoutSeconds);
+        await runCompareMode(apiUrl, apiKey, githubToken, failOnViolation, failOnPartial, pollIntervalSeconds, pollTimeoutSeconds);
     }
 }
 run().catch((err) => {
